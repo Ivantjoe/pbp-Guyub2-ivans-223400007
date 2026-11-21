@@ -1,0 +1,162 @@
+
+import 'package:flutter/material.dart';
+import 'package:guyub/detail_kartu.dart';
+import 'package:provider/provider.dart';
+
+import 'api.dart';
+import 'papan_model.dart';
+import 'isi_papan.dart';
+
+// A1: bungkus MaterialApp di sini.
+void main() {
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => PapanModel()..muat(),
+      child: const MaterialApp(home: LayarPapan()),
+    ),
+  );
+}
+
+// Class ItemBacklog
+class ItemBacklog {
+  final String kode;
+  final String judul;
+  final String jenis;
+  final int poin;
+  String status; // Bisa berubah, dipakai di A4.
+  final String? penanggungJawab;
+
+  ItemBacklog(
+    this.kode,
+    this.judul,
+    this.jenis,
+    this.poin,
+    this.status,
+    this.penanggungJawab,
+  );
+
+  // Nama di server (penanggung_jawab) boleh berbeda dari nama field di Dart.
+  factory ItemBacklog.fromJson(Map<String, dynamic> json) {
+    return ItemBacklog(
+      json['kode'],
+      json['judul'],
+      json['jenis'],
+      json['poin'],
+      json['status'],
+      json['penanggung_jawab'],
+    );
+  }
+}
+
+// A2: FutureBuilder diganti dengan data dari PapanModel.
+class LayarPapan extends StatefulWidget {
+  const LayarPapan({super.key});
+
+  @override
+  State<LayarPapan> createState() => _LayarPapanState();
+}
+
+class _LayarPapanState extends State<LayarPapan> {
+  // late Future<List<ItemBacklog>> muatan = ambilSemuaItem();
+
+  // Form kartu baru, lalu pesan menurut kode status.
+  Future<void> bukaFormTambah() async {
+    final judul = TextEditingController();
+    final poin = TextEditingController();
+    final simpan = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Kartu baru'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: judul,
+              decoration: const InputDecoration(labelText: 'Judul'),
+            ),
+            TextField(
+              controller: poin,
+              decoration: const InputDecoration(labelText: 'Poin'),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    if (simpan != true) return;
+
+    String pesan;
+    try {
+      final kode = await tambahItem(judul.text, int.tryParse(poin.text) ?? 0);
+      if (kode == 201) {
+        pesan = 'Kartu ditambahkan';
+        if (!mounted) return;
+        await Provider.of<PapanModel>(context, listen: false).muat();
+        // setState(() => muatan = ambilSemuaItem());
+      } else if (kode == 422) {
+        pesan = 'Judul wajib diisi dan poin paling kecil 1';
+      } else {
+        pesan = 'Server menjawab $kode';
+      }
+    } catch (e) {
+      pesan = 'Server tidak bisa dihubungi';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(pesan)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Guyub')),
+      body: IsiPapan(papan: context.watch<PapanModel>()),
+      floatingActionButton: FloatingActionButton(
+        onPressed: bukaFormTambah,
+        tooltip: 'Tambah kartu',
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class DaftarKartu extends StatelessWidget {
+  const DaftarKartu({super.key, required this.items});
+
+  final List<ItemBacklog> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final item = items[i];
+        return ListTile(
+          title: Text(item.judul),
+          subtitle: Text(
+            '${item.kode} · ${item.penanggungJawab ?? 'belum ada penanggung jawab'}',
+          ),
+          trailing: Text(item.status),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => 
+              DetailKartu(item: item)),
+            );
+            // A3: onTap ditulis di sini.
+          },
+          // A3: onTap ditulis di sini.
+        );
+      },
+    );
+  }
+}
